@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application de Prestation de Service</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React, React DOM, Babel CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Font Awesome for Icons (WhatsApp, Phone, Envelope) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"></link>
+    <style>
+        /* Styles personnalisés pour l'application */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body {
+          font-family: 'Inter', sans-serif;
+          margin: 0;
+          padding-top: 64px; /* Hauteur de la barre de navigation */
+          background-color: #f8fafc;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.8s ease-out forwards;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in-right {
+          animation: slideInRight 0.5s ease-out forwards;
+        }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(100%); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        /* Style for modals */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+        }
+        /* Hero Section Styling */
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); /* Adjusted gradient */
+            color: white;
+            padding: 8rem 0;
+            text-shadow: 1px 1px 4px rgba(0,0,0,0.3); /* Stronger shadow for text */
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at top left, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%); /* Stronger overlay */
+            transform: rotate(45deg);
+        }
+        /* Feature Card Styling */
+        .feature-card {
+            background: white;
+            border-radius: 16px; /* More rounded corners */
+            box-shadow: 0 12px 24px rgba(0,0,0,0.08); /* Stronger shadow */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            padding: 2.5rem; /* Increased padding */
+        }
+        .feature-card:hover {
+            transform: translateY(-8px); /* More pronounced lift */
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15); /* More pronounced shadow */
+        }
+        .feature-icon {
+            font-size: 4.5rem; /* Larger icons */
+            margin-bottom: 1.5rem;
+        }
+        /* Buttons on homepage */
+        .homepage-button {
+            transition: all 0.3s ease;
+            border-width: 2px;
+        }
+        .homepage-button:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Add this function at the beginning of your script, just after constant declarations
+        const secureFetch = async (url, method = 'GET', body = null) => {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': CSRF_TOKEN,
+                },
+                credentials: 'include', // This is essential for sending cookies
+            };
+            
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            console.log(`Making ${method} request to ${url}`, options);
+            
+            try {
+                const response = await fetch(url, options);
+                
+                if (!response.ok) {
+                    // Try to parse error message from response, if any
+                    const errorData = await response.json().catch(() => null);
+                    console.error('API Error:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        errorData: errorData // This will now show the detailed error from Django
+                    });
+                    // Use the error data from Django if available, otherwise a generic message
+                    const errorMessage = errorData && (errorData.detail || Object.values(errorData).flat().join(', ')) 
+                                         || response.statusText || 'API request failed';
+                    throw new Error(errorMessage);
+                }
+                
+                return response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw error;
+            }
+        };
+
+        // Destructure useState, useEffect, useCallback from React here once.
+        const { useState, useEffect, useCallback } = React;
+
+        // **IMPORTANT**: Changed API_BASE_URL to match the origin where Django is serving the HTML
+        // Based on logs, your HTML is loaded from http://127.0.0.1:8000
+        const API_BASE_URL = window.location.origin + '/api';
+
+        // Function to get CSRF token from the 'csrftoken' cookie
+        // Requires CSRF_COOKIE_HTTPONLY = False in Django settings for JS access
+        function getCSRFTokenFromCookie() {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Check if the cookie name is 'csrftoken'
+                    if (cookie.substring(0, 'csrftoken'.length + 1) === ('csrftoken' + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring('csrftoken'.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Global variable for CSRF Token, initially retrieved from cookie
+        let CSRF_TOKEN = getCSRFTokenFromCookie();
+        console.log("CLIENT_DEBUG: Initial CSRF_TOKEN from cookie on page load:", CSRF_TOKEN);
+
+        // Function to update CSRF_TOKEN dynamically (e.g., after login)
+        const updateCsrfToken = () => {
+            CSRF_TOKEN = getCSRFTokenFromCookie();
+            console.log("CLIENT_DEBUG: Updated CSRF_TOKEN (after event):", CSRF_TOKEN);
+        };
+
+        // Helper to format phone number for WhatsApp/call links
+        const formatPhoneNumber = (number) => {
+            if (!number) return '';
+            // Remove non-numeric characters and handle common international prefixes
+            return number.replace(/\D/g, '').replace(/^00/, '').replace(/^\+/, '');
+        };
+
+        // Generic Message Component
+        const MessageDisplay = ({ message, type = 'info' }) => {
+            if (!message) return null;
+            let bgColor = 'bg-blue-100';
+            let textColor = 'text-blue-700';
+            if (type === 'error') {
+                bgColor = 'bg-red-100';
+                textColor = 'text-red-700';
+            } else if (type === 'success') {
+                bgColor = 'bg-green-100';
+                textColor = 'text-green-700';
+            }
+
+            return (
+                <div className={`mt-4 p-3 rounded-md text-center ${bgColor} ${textColor} border ${type === 'error' ? 'border-red-200' : type === 'success' ? 'border-green-200' : 'border-blue-200'} animate-fade-in`}>
+                    {message}
+                </div>
+            );
+        };
+
+        // Reusable Modal Component
+        const Modal = ({ show, onClose, title, children }) => {
+            if (!show) {
+                return null;
+            }
+            return (
+                <div className="modal">
+                    <div className="modal-content">
+                        <span className="close-button" onClick={onClose}>&times;</span>
+                        <h2 className="text-xl font-semibold mb-4">{title}</h2>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        // Navbar Component
+        const Navbar = ({ isLoggedIn, userType, username, navigateTo, handleLogout }) => {
+            return (
+                <nav className="bg-gray-800 p-4 fixed w-full top-0 z-10 shadow-lg"> {/* Added shadow-lg */}
+                    <div className="container mx-auto flex flex-col md:flex-row justify-between items-center">
+                        {/* Logo */}
+                        <div className="text-white text-2xl font-bold cursor-pointer mb-4 md:mb-0" onClick={() => navigateTo('home')}>
+                            ServiceApp
+                        </div>
+
+                        {/* Navigation Links (centered on small screens, grouped on large) */}
+                        <div className="flex flex-col md:flex-row items-center md:space-x-4 space-y-2 md:space-y-0">
+                            <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('home')}>Accueil</button>
+                            <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('listProviders')}>Prestataires</button>
+                            <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('aboutUs')}>À Propos</button>
+                            <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('contact')}>Contact</button>
+                        </div>
+
+                        {/* User/Auth Buttons (right-aligned on large screens, stacked on small) */}
+                        <div className="flex flex-col md:flex-row items-center md:space-x-4 space-y-2 md:space-y-0 mt-4 md:mt-0">
+                            {isLoggedIn ? (
+                                <>
+                                    <span className="text-white px-3 py-1">Bonjour, {username} ({userType})</span>
+                                    {userType === 'client' && <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('clientDashboard')}>Mon Tableau de Bord</button>}
+                                    {userType === 'provider' && <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('providerDashboard')}>Mon Tableau de Bord</button>}
+                                    {userType === 'admin' && <button className="text-gray-300 hover:text-white px-3 py-1 rounded-md transition duration-200" onClick={() => navigateTo('adminDashboard')}>Admin Dashboard</button>}
+                                    <button className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 shadow-md" onClick={handleLogout}>Déconnexion</button>
+                                </>
+                            ) : (
+                                <>
+                                    <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 shadow-md" onClick={() => navigateTo('clientLogin')}>Client</button>
+                                    <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 shadow-md" onClick={() => navigateTo('providerLogin')}>Prestataire</button>
+                                    <button className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 shadow-md" onClick={() => navigateTo('adminLogin')}>Admin</button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        // Footer Component
+        const Footer = () => {
+            return (
+                <footer className="bg-gray-800 p-4 text-white text-center mt-8">
+                    <p>&copy; 2025 Application de Prestation de Service. Tous droits réservés.</p>
+                </footer>
+            );
+        };
+
+   // LoginForm (reusable for client, provider, admin)
+   const LoginForm = ({ role, onLoginSuccess, navigateTo }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [localMessage, setLocalMessage] = useState('');
+
+    const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLocalMessage('');
+
+    try {
+        const response = await secureFetch(`${API_BASE_URL}/login/`, 'POST', {
+            username,
+            password, 
+            role
+        });
+        
+        // Update CSRF token after login
+        CSRF_TOKEN = getCSRFTokenFromCookie();
+        console.log('New CSRF token after login:', CSRF_TOKEN);
+        
+        setLocalMessage(response.message || 'Connexion réussie !');
+        // Pass phone_number to onLoginSuccess
+        onLoginSuccess(response.user.user_type, response.user.username, response.user.profile_id, response.user.phone_number);
+    } catch (error) {
+        console.error("Login error:", error);
+        setLocalMessage(error.message || 'Erreur de connexion. Vérifiez vos identifiants.');
+    }
+};
+
+
+    return (
+        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md mt-10 animate-fade-in">
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Connexion {role.charAt(0).toUpperCase() + role.slice(1)}</h2>
+            {localMessage && <MessageDisplay message={localMessage} type="error" />}
+            <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                        Nom d'utilisateur:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="username"
+                        type="text"
+                        name="username"
+                        placeholder={role === "admin" ? "Nom d'utilisateur Admin" : "Nom d'utilisateur"}
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="mb-6">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                        Mot de passe:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+                        id="password"
+                        type="password"
+                        placeholder="********"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="flex items-center justify-between">
+                    <button
+                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        type="submit"
+                    >
+                        Se connecter
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => navigateTo('forgotPassword')}
+                        className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
+                    >
+                        Mot de passe oublié?
+                    </button>
+                </div>
+            </form>
+            <p className="text-center text-gray-600 text-sm mt-4">
+                Pas encore de compte ?{' '}
+                <button className="text-blue-500 hover:text-blue-800 font-bold" onClick={() => navigateTo('register')}>
+                    Inscrivez-vous ici
+                </button>
+            </p>
+        </div>
+    );
+};
+
+
+
+// Registration Form
+const RegisterForm = ({ navigateTo }) => {
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState(''); // New phone number state
+    const [userType, setUserType] = useState('client');
+    const [service, setService] = useState('');
+    const [localMessage, setLocalMessage] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLocalMessage('');
+
+        console.log("CLIENT_DEBUG (RegisterForm): Submitting registration request.");
+        console.log("CLIENT_DEBUG (RegisterForm): CSRF_TOKEN before register POST:", CSRF_TOKEN);
+        console.log("CLIENT_DEBUG (RegisterForm): document.cookie before register POST:", document.cookie);
+
+        const payload = { 
+            name, 
+            email, 
+            password, 
+            username: email, // Use email as username
+            user_type: userType,
+            phone_number: phoneNumber // Include phone number
+        };
+        if (userType === 'provider') {
+            payload.service = service;
+        }
+
+        // Determine registration URL based on user type
+        const url = userType === 'client' ? `${API_BASE_URL}/clients/` : `${API_BASE_URL}/providers/`;
+
+        try {
+            const response = await secureFetch(url, 'POST', payload);
+
+            setLocalMessage(response.message || 'Inscription réussie ! Veuillez vous connecter.');
+            setName('');
+            setEmail('');
+            setPassword('');
+            setPhoneNumber(''); // Clear phone number
+            setService('');
+            navigateTo('clientLogin');
+        }
+        catch (error) {
+            console.error("CLIENT_DEBUG (RegisterForm): Network/connection error:", error);
+            setLocalMessage(error.message || 'Erreur de connexion au serveur. Veuillez réessayer.');
+        }
+    };
+
+    return (
+        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md mt-10 animate-fade-in">
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Inscription</h2>
+            {localMessage && <MessageDisplay message={localMessage} type="error" />}
+            <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
+                        Nom Complet:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="name"
+                        type="text"
+                        placeholder="Votre Nom"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                        Email:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="email"
+                        type="email"
+                        placeholder="votre@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="phoneNumber">
+                        Numéro de Téléphone:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="phoneNumber"
+                        type="tel"
+                        placeholder="Ex: +2376XXXXXXXX"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                        Mot de passe:
+                    </label>
+                    <input
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+                        id="password"
+                        type="password"
+                        placeholder="********"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="userType">
+                        Type d'utilisateur:
+                    </label>
+                    <select
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="userType"
+                        value={userType}
+                        onChange={(e) => setUserType(e.target.value)}
+                    >
+                        <option value="client">Client</option>
+                        <option value="provider">Prestataire</option>
+                    </select>
+                </div>
+                {userType === 'provider' && (
+                    <div className="mb-6">
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="service">
+                            Service Proposé:
+                        </label>
+                        <input
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            id="service"
+                            type="text"
+                            placeholder="Ex: Plomberie, Jardinage"
+                            value={service}
+                            onChange={(e) => setService(e.target.value)}
+                            required={userType === 'provider'}
+                        />
+                    </div>
+                )}
+                <div className="flex items-center justify-between">
+                    <button
+                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        type="submit"
+                    >
+                        S'inscrire
+                    </button>
+                </div>
+            </form>
+            <p className="text-center text-gray-600 text-sm mt-4">
+                Déjà un compte ?{' '}
+                <button className="text-blue-500 hover:text-blue-800 font-bold" onClick={() => navigateTo('clientLogin')}>
+                    Connectez-vous ici
+                </button>
+            </p>
+        </div>
+    );
+};
+
+        // ForgotPasswordForm Component
+        const ForgotPasswordForm = ({ navigateTo }) => {
+            const [email, setEmail] = useState('');
+            const [message, setMessage] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setMessage('');
+                console.log("CLIENT_DEBUG (ForgotPasswordForm): Submitting forgot password request.");
+                console.log("CLIENT_DEBUG (ForgotPasswordForm): CSRF_TOKEN before forgot password POST:", CSRF_TOKEN);
+                console.log("CLIENT_DEBUG (ForgotPasswordForm): document.cookie before forgot password POST:", document.cookie);
+                try {
+                    const response = await secureFetch(`${API_BASE_URL}/forgot-password/`, 'POST', { email });
+                    setMessage(response.message || 'Un email de réinitialisation a été envoyé si votre adresse est enregistrée.');
+                } catch (error) {
+                    console.error("CLIENT_DEBUG (ForgotPasswordForm): Network/connection error:", error);
+                    setMessage(error.message || 'Erreur de connexion au serveur. Veuillez réessayer.');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md mt-10 animate-fade-in">
+                    <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Mot de passe oublié ?</h2>
+                    {message && <MessageDisplay message={message} type={message.includes("envoyé") ? "success" : "error"} />}
+                    <form onSubmit={handleSubmit}>
+                        <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                                Votre Email:
+                            </label>
+                            <input
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                id="email"
+                                type="email"
+                                placeholder="votre@email.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <button
+                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                type="submit"
+                            >
+                                Réinitialiser le mot de passe
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => navigateTo('clientLogin')}
+                                className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
+                            >
+                                Annuler
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        // PasswordResetConfirmForm Component
+        const PasswordResetConfirmForm = ({ navigateTo, uidb64, token }) => {
+            const [newPassword1, setNewPassword1] = useState('');
+            const [newPassword2, setNewPassword2] = useState('');
+            const [message, setMessage] = useState('');
+
+            useEffect(() => {
+                if (!uidb64 || !token) {
+                    setMessage('Lien de réinitialisation invalide ou expiré.');
+                }
+            }, [uidb64, token]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setMessage('');
+                if (newPassword1 !== newPassword2) {
+                    setMessage('Les mots de passe ne correspondent pas.');
+                    return;
+                }
+                if (!uidb64 || !token) {
+                    setMessage('Impossible de réinitialiser le mot de passe sans un lien valide.');
+                    return;
+                }
+
+                console.log("CLIENT_DEBUG (PasswordResetConfirmForm): Submitting password reset confirm request.");
+                console.log("CLIENT_DEBUG (PasswordResetConfirmForm): CSRF_TOKEN before reset confirm POST:", CSRF_TOKEN);
+                console.log("CLIENT_DEBUG (PasswordResetConfirmForm): document.cookie before reset confirm POST:", document.cookie);
+
+
+                try {
+                    const response = await secureFetch(`${API_BASE_URL}/reset-password/confirm/`, 'POST', { uidb64: uidb64, token: token, new_password1: newPassword1, new_password2: newPassword2 });
+                    setMessage(response.message || 'Votre mot de passe a été réinitialisé avec succès !');
+                    setTimeout(() => navigateTo('clientLogin'), 3000);
+                } catch (error) {
+                    console.error("CLIENT_DEBUG (PasswordResetConfirmForm): Network/connection error:", error);
+                    setMessage(error.message || 'Erreur de connexion au serveur. Veuillez réessayer.');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md mt-10 animate-fade-in">
+                    <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Définir un nouveau mot de passe</h2>
+                    {message && <MessageDisplay message={message} type={message.includes("succès") ? "success" : "error"} />}
+                    <form onSubmit={handleSubmit}>
+                        <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="newPassword1">
+                                Nouveau mot de passe:
+                            </label>
+                            <input
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                id="newPassword1"
+                                type="password"
+                                placeholder="Nouveau mot de passe"
+                                value={newPassword1}
+                                onChange={(e) => setNewPassword1(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="newPassword2">
+                                Confirmer le nouveau mot de passe:
+                            </label>
+                            <input
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+                                id="newPassword2"
+                                type="password"
+                                placeholder="Confirmer le mot de passe"
+                                value={newPassword2}
+                                onChange={(e) => setNewPassword2(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <button
+                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                type="submit"
+                            >
+                                Réinitialiser
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => navigateTo('clientLogin')}
+                                className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
+                            >
+                                Annuler
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        // HomePage Component (Improved Design - Further Refined)
+        const HomePage = () => (
+            <div className="animate-fade-in">
+                {/* Hero Section */}
+                <section className="hero-section text-center py-24 md:py-32"> {/* Increased padding */}
+                    <div className="container mx-auto px-6 relative z-10">
+                        <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold mb-6 animate-fade-in leading-tight"> {/* Larger, tighter heading */}
+                            Découvrez des Services Exceptionnels,<br/> Près de Chez Vous.
+                        </h1>
+                        <p className="text-lg md:text-xl lg:text-2xl opacity-90 mb-12 max-w-4xl mx-auto font-light">
+                            Connectez-vous avec des professionnels qualifiés pour tous vos besoins quotidiens. Facile, rapide et fiable.
+                        </p>
+                        <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-6">
+                            <button className="homepage-button bg-white text-indigo-700 hover:bg-indigo-50 border-indigo-700 hover:border-indigo-800 font-bold py-3 px-8 rounded-full text-lg shadow-lg">
+                                Explorer les Services
+                            </button>
+                            <button className="homepage-button bg-yellow-400 text-yellow-900 hover:bg-yellow-300 border-yellow-400 hover:border-yellow-500 font-bold py-3 px-8 rounded-full text-lg shadow-lg">
+                                Rejoindre comme Prestataire
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Features Section */}
+                <section className="py-20 bg-gray-50"> {/* Lighter background */}
+                    <div className="container mx-auto px-6 text-center">
+                        <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-12">Nos Avantages Clés</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="feature-card p-6 md:p-8 flex flex-col items-center">
+                                <div className="feature-icon text-indigo-600">
+                                    <i className="fas fa-search"></i>
+                                </div>
+                                <h3 className="text-xl md:text-2xl font-semibold text-gray-900 mb-3">Recherche Intuitive</h3>
+                                <p className="text-gray-600 text-base">Trouvez des experts en quelques secondes grâce à notre moteur de recherche avancé.</p>
+                            </div>
+                            <div className="feature-card p-6 md:p-8 flex flex-col items-center">
+                                <div className="feature-icon text-green-600">
+                                    <i className="fas fa-handshake"></i>
+                                </div>
+                                <h3 className="text-xl md:text-2xl font-semibold text-gray-900 mb-3">Connexion Directe</h3>
+                                <p className="text-gray-600 text-base">Établissez un contact direct et rapide avec les professionnels de votre choix.</p>
+                            </div>
+                            <div className="feature-card p-6 md:p-8 flex flex-col items-center">
+                                <div className="feature-icon text-red-600">
+                                    <i className="fas fa-calendar-check"></i>
+                                </div>
+                                <h3 className="text-xl md:text-2xl font-semibold text-gray-900 mb-3">Réservation Facile</h3>
+                                <p className="text-gray-600 text-base">Organisez vos rendez-vous sans effort grâce à notre système de réservation intégré.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Call to Action Section */}
+                <section className="py-20 bg-indigo-700 text-white text-center">
+                    <div className="container mx-auto px-6">
+                        <h2 className="text-3xl md:text-4xl font-bold mb-6">Prêt à Transformer Vos Besoins en Solutions ?</h2>
+                        <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
+                            Rejoignez notre communauté dynamique et découvrez la simplicité de trouver ou d'offrir des services.
+                        </p>
+                        <button className="homepage-button bg-white text-indigo-700 hover:bg-gray-200 border-white hover:border-gray-300 font-bold py-3 px-8 rounded-full text-lg shadow-lg">
+                            Démarrer Gratuitement
+                        </button>
+                    </div>
+                </section>
+            </div>
+        );
+
+        // New About Us Page Component
+        const AboutUsPage = () => (
+            <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                <h2 className="text-4xl font-bold text-gray-800 mb-6 text-center">À Propos de ServiceApp</h2>
+                <div className="bg-white rounded-lg shadow-md p-8 max-w-3xl mx-auto">
+                    <p className="text-lg text-gray-700 mb-4">
+                        ServiceApp est une plateforme innovante conçue pour simplifier la connexion entre les personnes ayant besoin de services et les professionnels qualifiés prêts à les offrir. Notre mission est de rendre la recherche et la réservation de services aussi faciles et efficaces que possible.
+                    </p>
+                    <p className="text-lg text-gray-700 mb-4">
+                        Que vous soyez un client à la recherche d'un plombier, d'un jardinier, d'un professeur particulier, ou de tout autre service, ServiceApp vous permet de parcourir une liste de prestataires vérifiés, de visualiser leurs offres, et de prendre rendez-vous en quelques clics.
+                    </p>
+                    <p className="text-lg text-gray-700 mb-4">
+                        Pour les prestataires, ServiceApp offre une vitrine numérique pour présenter leurs compétences, attirer de nouveaux clients, et gérer leurs réservations de manière organisée. Nous nous engageons à fournir un environnement sécurisé et fiable pour toutes les transactions.
+                    </p>
+                    <p className="text-lg text-gray-700">
+                        Notre objectif est de bâtir une communauté forte où la confiance et la qualité des services sont au cœur de chaque interaction.
+                    </p>
+                </div>
+            </div>
+        );
+
+        // New Contact Page Component
+        const ContactPage = () => (
+            <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                <h2 className="text-4xl font-bold text-gray-800 mb-6 text-center">Contactez-nous</h2>
+                <div className="bg-white rounded-lg shadow-md p-8 max-w-md mx-auto text-center">
+                    <h3 className="text-2xl font-semibold text-gray-900 mb-4">Informations de Contact Administrateur</h3>
+                    <p className="text-lg text-gray-700 mb-4">
+                        Pour toute question, assistance technique, partenariat ou demande générale, n'hésitez pas à contacter notre administrateur.
+                    </p>
+                    <div className="flex flex-col items-center space-y-4">
+                        <div className="flex items-center space-x-3 text-gray-800 text-lg">
+                            <i className="fas fa-phone text-blue-500"></i>
+                            <span>Téléphone: +237 680314611</span>
+                            <a 
+                                href="tel:+237680314611" 
+                                className="text-blue-500 hover:text-blue-700 text-xl"
+                                title="Appeler l'administrateur"
+                            >
+                                <i className="fas fa-phone-square-alt"></i>
+                            </a>
+                        </div>
+                        <div className="flex items-center space-x-3 text-gray-800 text-lg">
+                            <i className="fab fa-whatsapp text-green-500"></i>
+                            <span>WhatsApp: +237 680314611</span>
+                            <a 
+                                href="https://wa.me/237680314611" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-green-500 hover:text-green-700 text-xl"
+                                title="Contacter l'administrateur sur WhatsApp"
+                            >
+                                <i className="fab fa-whatsapp-square"></i>
+                            </a>
+                        </div>
+                        <div className="flex items-center space-x-3 text-gray-800 text-lg">
+                            <i className="fas fa-envelope text-red-500"></i>
+                            <span>Email: admin@serviceapp.com</span>
+                            <a 
+                                href="mailto:admin@serviceapp.com" 
+                                className="text-red-500 hover:text-red-700 text-xl"
+                                title="Envoyer un email à l'administrateur"
+                            >
+                                <i className="fas fa-envelope-square"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // Component to list providers (publicly visible)
+        const ListProviders = ({ providers }) => {
+            const [searchTerm, setSearchTerm] = useState('');
+
+            const filteredProviders = providers.filter(provider =>
+                (provider.name && provider.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (provider.service && provider.service.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (provider.phone_number && provider.phone_number.toLowerCase().includes(searchTerm.toLowerCase())) // Search by phone number
+            );
+
+            return (
+                <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Nos Prestataires</h2>
+                    <div className="mb-6">
+                        <input
+                            type="text"
+                            placeholder="Rechercher par nom, service ou numéro de téléphone..."
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    {filteredProviders.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {filteredProviders.map(provider => (
+                                <div key={provider.id} className="bg-white rounded-lg shadow-md p-6 animate-slide-in-right">
+                                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{provider.name}</h3>
+                                    <p className="text-gray-600 mb-2">Email: {provider.email}</p>
+                                    <p className="text-indigo-600 font-medium">Service: {provider.service}</p>
+                                    {provider.description && <p className="text-gray-700 text-sm mt-2">{provider.description}</p>} {/* Display description */}
+                                    {provider.phone_number && (
+                                        <div className="flex items-center space-x-2 mt-2">
+                                            <p className="text-gray-700">Tel: {provider.phone_number}</p>
+                                            <a 
+                                                href={`https://wa.me/${formatPhoneNumber(provider.phone_number)}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="text-green-500 hover:text-green-700 text-lg"
+                                                title={`Contacter ${provider.name} sur WhatsApp`}
+                                            >
+                                                <i className="fab fa-whatsapp"></i>
+                                            </a>
+                                            <a 
+                                                href={`tel:${provider.phone_number}`} 
+                                                className="text-blue-500 hover:text-blue-700 text-lg"
+                                                title={`Appeler ${provider.name}`}
+                                            >
+                                                <i className="fas fa-phone"></i>
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-600">Aucun prestataire trouvé.</p>
+                    )}
+                </div>
+            );
+        };
+
+        // Modals for Add/Edit Client/Provider
+        const ClientModal = ({ isOpen, onClose, client = {}, onSave }) => {
+            const [name, setName] = useState(client.name || '');
+            const [email, setEmail] = useState(client.email || '');
+            const [phoneNumber, setPhoneNumber] = useState(client.phone_number || ''); // New phone number state
+            const [password, setPassword] = useState('');
+            const [localMessage, setLocalMessage] = useState('');
+
+            useEffect(() => {
+                setName(client.name || '');
+                setEmail(client.email || '');
+                setPhoneNumber(client.phone_number || ''); // Initialize phone number
+                setPassword('');
+                setLocalMessage('');
+            }, [client, isOpen]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLocalMessage('');
+                const method = client.id ? 'PUT' : 'POST';
+                const url = client.id ? `${API_BASE_URL}/clients/${client.id}/` : `${API_BASE_URL}/clients/`;
+                const payload = client.id ? { name, email, phone_number: phoneNumber } : { username: email, name, email, phone_number: phoneNumber, password };
+
+                console.log("CLIENT_DEBUG (ClientModal): Submitting client request. Method:", method, "URL:", url);
+                console.log("CLIENT_DEBUG (ClientModal): Payload:", payload);
+                console.log("CLIENT_DEBUG (ClientModal): CSRF_TOKEN before client POST/PUT:", CSRF_TOKEN);
+                console.log("CLIENT_DEBUG (ClientModal): document.cookie before client POST/PUT:", document.cookie);
+
+
+                try {
+                    const response = await secureFetch(url, method, payload);
+
+                    onSave(); // This should trigger a re-fetch of clients
+                    onClose();
+                    setLocalMessage(`Client ${client.id ? 'modifié' : 'ajouté'} avec succès!`); // This message will be handled by AdminDashboard
+                    console.log(`CLIENT_DEBUG (ClientModal): Client ${client.id ? 'updated' : 'added'} successfully.`);
+                } catch (error) {
+                    console.error(`CLIENT_DEBUG (ClientModal): Erreur ${client.id ? 'modification' : 'ajout'} client (réseau):`, error);
+                    setLocalMessage(error.message || 'Erreur réseau/connexion. Veuillez réessayer.');
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center">
+                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
+                        <span className="close-button" onClick={onClose}>&times;</span>
+                        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{client.id ? 'Modifier Client' : 'Ajouter Client'}</h2>
+                        {localMessage && <MessageDisplay message={localMessage} type="error" />}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">Nom:</label>
+                                <input type="text" id="name" className="shadow border rounded w-full py-2 px-3" value={name} onChange={(e) => setName(e.target.value)} required />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">Email:</label>
+                                <input type="email" id="email" className="shadow border rounded w-full py-2 px-3" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="phoneNumber">Numéro de Téléphone:</label>
+                                <input type="tel" id="phoneNumber" className="shadow border rounded w-full py-2 px-3" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+                            </div>
+                            {!client.id && (
+                                <div className="mb-4">
+                                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">Mot de passe:</label>
+                                    <input type="password" id="password" className="shadow border rounded w-full py-2 px-3" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                                </div>
+                            )}
+                            <div className="flex justify-end space-x-4">
+                                <button type="button" onClick={onClose} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Annuler</button>
+                                <button type="submit" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">{client.id ? 'Modifier' : 'Ajouter'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const ProviderModal = ({ isOpen, onClose, provider = {}, onSave }) => {
+            const [name, setName] = useState(provider.name || '');
+            const [email, setEmail] = useState(provider.email || '');
+            const [service, setService] = useState(provider.service || '');
+            const [phoneNumber, setPhoneNumber] = useState(provider.phone_number || '');
+            const [description, setDescription] = useState(provider.description || ''); // New state for description
+            const [password, setPassword] = useState('');
+            const [localMessage, setLocalMessage] = useState('');
+            const [isLoadingLLM, setIsLoadingLLM] = useState(false); // Loading state for LLM call
+
+            useEffect(() => {
+                setName(provider.name || '');
+                setEmail(provider.email || '');
+                setService(provider.service || '');
+                setPhoneNumber(provider.phone_number || '');
+                setDescription(provider.description || ''); // Initialize description
+                setPassword('');
+                setLocalMessage('');
+            }, [provider, isOpen]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLocalMessage('');
+                const method = provider.id ? 'PUT' : 'POST';
+                const url = provider.id ? `${API_BASE_URL}/providers/${provider.id}/` : `${API_BASE_URL}/providers/`;
+                const payload = provider.id 
+                    ? { name, email, service, phone_number: phoneNumber, description } 
+                    : { username: email, name, email, service, phone_number: phoneNumber, description, password }; // Include description in payload
+
+                console.log("CLIENT_DEBUG (ProviderModal): Submitting provider request. Method:", method, "URL:", url);
+                console.log("CLIENT_DEBUG (ProviderModal): Payload:", payload);
+                console.log("CLIENT_DEBUG (ProviderModal): CSRF_TOKEN before provider POST/PUT:", CSRF_TOKEN);
+                console.log("CLIENT_DEBUG (ProviderModal): document.cookie before provider POST/PUT:", document.cookie);
+
+
+                try {
+                    const response = await secureFetch(url, method, payload);
+
+                    onSave(); // This should trigger a re-fetch of providers
+                    onClose();
+                    setLocalMessage(`Prestataire ${provider.id ? 'modifié' : 'ajouté'} avec succès!`);
+                    console.log(`CLIENT_DEBUG (ProviderModal): Provider ${provider.id ? 'updated' : 'added'} successfully.`);
+                } catch (error) {
+                    console.error(`CLIENT_DEBUG (ProviderModal): Erreur ${provider.id ? 'modification' : 'ajout'} prestataire (réseau):`, error);
+                    setLocalMessage(error.message || 'Erreur réseau/connexion. Veuillez réessayer.');
+                }
+            };
+
+            const generateServiceDescription = async () => {
+                if (!service) {
+                    setLocalMessage("Veuillez entrer le nom du service pour générer une description.");
+                    return;
+                }
+                setIsLoadingLLM(true);
+                setLocalMessage('');
+
+                try {
+                    const prompt = `Génère une description de service professionnelle et détaillée pour le service suivant : "${service}". Incluez les avantages pour le client et le type de travail effectué. Maximum 150 mots.`;
+                    
+                    const apiKey = ""; // Canvas will automatically provide the API key
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    
+                    const payload = {
+                        contents: [{ role: "user", parts: [{ text: prompt }] }]
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 && 
+                        result.candidates[0].content && result.candidates[0].content.parts && 
+                        result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        setDescription(generatedText);
+                        setLocalMessage('Description générée avec succès par l\'IA !');
+                    } else {
+                        setLocalMessage('Échec de la génération de description. Veuillez réessayer.');
+                    }
+                } catch (error) {
+                    console.error("Erreur lors de l'appel de l'API Gemini:", error);
+                    setLocalMessage("Erreur lors de la connexion à l'IA pour générer la description. Veuillez vérifier votre connexion.");
+                } finally {
+                    setIsLoadingLLM(false);
+                }
+            };
+
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center">
+                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
+                        <span className="close-button" onClick={onClose}>&times;</span>
+                        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{provider.id ? 'Modifier Prestataire' : 'Ajouter Prestataire'}</h2>
+                        {localMessage && <MessageDisplay message={localMessage} type={localMessage.includes("succès") ? "success" : "error"} />}
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">Nom:</label>
+                                <input type="text" id="name" className="shadow border rounded w-full py-2 px-3" value={name} onChange={(e) => setName(e.target.value)} required />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">Email:</label>
+                                <input type="email" id="email" className="shadow border rounded w-full py-2 px-3" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="service">Service:</label>
+                                <input type="text" id="service" className="shadow border rounded w-full py-2 px-3" value={service} onChange={(e) => setService(e.target.value)} required />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="phoneNumber">Numéro de Téléphone:</label>
+                                <input type="tel" id="phoneNumber" className="shadow border rounded w-full py-2 px-3" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">Description du Service:</label>
+                                <textarea 
+                                    id="description" 
+                                    className="shadow border rounded w-full py-2 px-3 h-32 resize-none" 
+                                    value={description} 
+                                    onChange={(e) => setDescription(e.target.value)} 
+                                    placeholder="Décrivez votre service..."
+                                ></textarea>
+                                <button 
+                                    type="button" 
+                                    onClick={generateServiceDescription} 
+                                    disabled={isLoadingLLM}
+                                    className={`mt-2 w-full flex items-center justify-center bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-200 ${isLoadingLLM ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    {isLoadingLLM ? (
+                                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    ) : (
+                                        'Générer une description ✨'
+                                    )}
+                                </button>
+                            </div>
+                            {!provider.id && (
+                                <div className="mb-4">
+                                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">Mot de passe:</label>
+                                    <input type="password" id="password" className="shadow border rounded w-full py-2 px-3" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                                </div>
+                            )}
+                            <div className="flex justify-end space-x-4">
+                                <button type="button" onClick={onClose} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Annuler</button>
+                                <button type="submit" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">{provider.id ? 'Modifier' : 'Ajouter'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // Admin Dashboard
+        const AdminDashboard = ({ clients, providers, fetchClients, fetchProviders, reservations, fetchReservations }) => {
+            const [clientSearchTerm, setClientSearchTerm] = useState('');
+            const [providerSearchTerm, setProviderSearchTerm] = useState('');
+            const [reservationSearchTerm, setReservationSearchTerm] = useState('');
+            const [localMessage, setLocalMessage] = useState('');
+            const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+            const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
+            const [selectedClient, setSelectedClient] = useState(null);
+            const [selectedProvider, setSelectedProvider] = useState(null);
+
+            // This useEffect will now only log when the component mounts or state changes
+            useEffect(() => {
+                console.log('CLIENT_DEBUG (AdminDashboard): clients state received as prop:', clients);
+                console.log('CLIENT_DEBUG (AdminDashboard): providers state received as prop:', providers);
+                console.log('CLIENT_DEBUG (AdminDashboard): reservations state received as prop:', reservations);
+            }, [clients, providers, reservations]);
+
+            const openClientModal = (client = null) => {
+                setSelectedClient(client);
+                setIsClientModalOpen(true);
+            };
+
+            const openProviderModal = (provider = null) => {
+                setSelectedProvider(provider);
+                setIsProviderModalOpen(true);
+            };
+
+            const filteredClients = clients.filter(client =>
+                (client.name && client.name.toLowerCase().includes(clientSearchTerm.toLowerCase())) ||
+                (client.email && client.email.toLowerCase().includes(clientSearchTerm.toLowerCase())) ||
+                (client.phone_number && client.phone_number.toLowerCase().includes(clientSearchTerm.toLowerCase())) // Search by phone number
+            );
+
+            const filteredProviders = providers.filter(provider =>
+                (provider.name && provider.name.toLowerCase().includes(providerSearchTerm.toLowerCase())) ||
+                (provider.email && provider.email.toLowerCase().includes(providerSearchTerm.toLowerCase())) ||
+                (provider.service && provider.service.toLowerCase().includes(providerSearchTerm.toLowerCase())) ||
+                (provider.phone_number && provider.phone_number.toLowerCase().includes(providerSearchTerm.toLowerCase())) // Search by phone number
+            );
+
+            const filteredReservations = reservations.filter(reservation =>
+                (reservation.service && reservation.service.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.client_name && reservation.client_name.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.provider_name && reservation.provider_name.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.status && reservation.status.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.client_phone_number && reservation.client_phone_number.toLowerCase().includes(reservationSearchTerm.toLowerCase())) || // Search by client phone
+                (reservation.provider_phone_number && reservation.provider_phone_number.toLowerCase().includes(reservationSearchTerm.toLowerCase())) // Search by provider phone
+            );
+
+
+            const handleDelete = async (type, id, fetchFn) => {
+                // Using a custom modal instead of confirm for better UX
+                if (!window.confirm(`Êtes-vous sûr de vouloir supprimer ce ${type}? Cela supprimera également l'utilisateur Django associé.`)) return;
+
+                setLocalMessage('');
+                console.log(`CLIENT_DEBUG (AdminDashboard): Deleting ${type} with ID:`, id);
+                console.log(`CLIENT_DEBUG (AdminDashboard): CSRF_TOKEN before delete ${type}:`, CSRF_TOKEN);
+                try {
+                    await secureFetch(`${API_BASE_URL}/${type}s/${id}/`, 'DELETE');
+                    setLocalMessage(`${type.charAt(0).toUpperCase() + type.slice(1)} supprimé avec succès !`);
+                    fetchFn(); // Re-fetch data to update UI
+                    console.log(`CLIENT_DEBUG (AdminDashboard): ${type} ID ${id} deleted successfully. Fetching new data.`);
+                } catch (error) {
+                    console.error(`CLIENT_DEBUG (AdminDashboard): Erreur suppression ${type} (réseau):`, error);
+                    setLocalMessage(error.message || 'Erreur réseau/connexion. Veuillez réessayer.');
+                }
+            };
+
+            const handleUpdateReservationStatus = async (reservationId, newStatus) => {
+                if (!window.confirm(`Voulez-vous vraiment changer le statut de cette réservation à "${newStatus}" ?`)) return;
+
+                setLocalMessage('');
+                console.log(`CLIENT_DEBUG (AdminDashboard): Updating reservation ${reservationId} status to ${newStatus}.`);
+                console.log(`CLIENT_DEBUG (AdminDashboard): CSRF_TOKEN before update reservation PATCH:`, CSRF_TOKEN);
+                try {
+                    await secureFetch(`${API_BASE_URL}/reservations/${reservationId}/`, 'PATCH', { status: newStatus });
+                    setLocalMessage('Statut de la réservation mis à jour !');
+                    fetchReservations(); // Re-fetch reservations to update UI
+                    console.log(`CLIENT_DEBUG (AdminDashboard): Reservation ${reservationId} status updated to ${newStatus}. Fetching new data.`);
+                } catch (error) {
+                    console.error('CLIENT_DEBUG (AdminDashboard): Erreur mise à jour statut réservation (réseau):', error);
+                    setLocalMessage(error.message || 'Une erreur est survenue lors de la mise à jour du statut de la réservation.');
+                }
+            };
+
+            const handleDeleteReservation = async (reservationId) => {
+                if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette réservation ?')) return;
+
+                setLocalMessage('');
+                console.log(`CLIENT_DEBUG (AdminDashboard): Deleting reservation with ID:`, reservationId);
+                console.log(`CLIENT_DEBUG (AdminDashboard): CSRF_TOKEN before delete reservation:`, CSRF_TOKEN);
+                try {
+                    await secureFetch(`${API_BASE_URL}/reservations/${reservationId}/`, 'DELETE');
+                    setLocalMessage('Réservation supprimée avec succès !');
+                    fetchReservations(); // Re-fetch reservations to update UI
+                    console.log(`CLIENT_DEBUG (AdminDashboard): Reservation ${reservationId} deleted. Fetching new data.`);
+                } catch (error) {
+                    console.error('CLIENT_DEBUG (AdminDashboard): Erreur suppression réservation (réseau):', error);
+                    setLocalMessage(error.message || 'Une erreur est survenue lors de la suppression de la réservation.');
+                }
+            };
+
+            return (
+                <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Tableau de Bord Administrateur</h2>
+                    {localMessage && <MessageDisplay message={localMessage} type={localMessage.includes("succès") ? "success" : "error"} />}
+
+                    <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Gestion des Clients</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <input
+                                type="text"
+                                placeholder="Rechercher un client par nom, email ou numéro de téléphone..."
+                                className="shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex-grow mr-4"
+                                value={clientSearchTerm}
+                                onChange={(e) => setClientSearchTerm(e.target.value)}
+                            />
+                            <button onClick={() => openClientModal()} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Ajouter Client</button>
+                        </div>
+                        {filteredClients.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-2 px-4 border-b">ID</th>
+                                            <th className="py-2 px-4 border-b">Nom</th>
+                                            <th className="py-2 px-4 border-b">Email</th>
+                                            <th className="py-2 px-4 border-b">Téléphone</th> {/* Added table header */}
+                                            <th className="py-2 px-4 border-b">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredClients.map(client => (
+                                            <tr key={client.id} className="hover:bg-gray-50">
+                                                <td className="py-2 px-4 border-b">{client.id}</td>
+                                                <td className="py-2 px-4 border-b">{client.name}</td>
+                                                <td className="py-2 px-4 border-b">{client.email}</td>
+                                                <td className="py-2 px-4 border-b">{client.phone_number || 'N/A'}</td> {/* Display phone number */}
+                                                <td className="py-2 px-4 border-b">
+                                                    <button onClick={() => openClientModal(client)} className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded text-sm mr-2">Modifier</button>
+                                                    <button onClick={() => handleDelete('client', client.id, fetchClients)} className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">Supprimer</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600">Aucun client trouvé. Assurez-vous que des clients sont enregistrés et que vous avez les permissions nécessaires.</p>
+                        )}
+                        <ClientModal isOpen={isClientModalOpen} onClose={() => setIsClientModalOpen(false)} client={selectedClient || {}} onSave={fetchClients} />
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Gestion des Prestataires</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <input
+                                type="text"
+                                placeholder="Rechercher un prestataire par nom, email, service ou numéro de téléphone..."
+                                className="shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex-grow mr-4"
+                                value={providerSearchTerm}
+                                onChange={(e) => setProviderSearchTerm(e.target.value)}
+                            />
+                            <button onClick={() => openProviderModal()} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Ajouter Prestataire</button>
+                        </div>
+                        {filteredProviders.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-2 px-4 border-b">ID</th>
+                                            <th className="py-2 px-4 border-b">Nom</th>
+                                            <th className="py-2 px-4 border-b">Email</th>
+                                            <th className="py-2 px-4 border-b">Service</th>
+                                            <th className="py-2 px-4 border-b">Téléphone</th> {/* Added table header */}
+                                            <th className="py-2 px-4 border-b">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredProviders.map(provider => (
+                                            <tr key={provider.id} className="hover:bg-gray-50">
+                                                <td className="py-2 px-4 border-b">{provider.id}</td>
+                                                <td className="py-2 px-4 border-b">{provider.name}</td>
+                                                <td className="py-2 px-4 border-b">{provider.email}</td>
+                                                <td className="py-2 px-4 border-b">{provider.service}</td>
+                                                <td className="py-2 px-4 border-b">{provider.phone_number || 'N/A'}</td> {/* Display phone number */}
+                                                <td className="py-2 px-4 border-b">
+                                                    <button onClick={() => openProviderModal(provider)} className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded text-sm mr-2">Modifier</button>
+                                                    <button onClick={() => handleDelete('provider', provider.id, fetchProviders)} className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">Supprimer</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600">Aucun prestataire trouvé. Assurez-vous que des prestataires sont enregistrés et que vous avez les permissions nécessaires.</p>
+                        )}
+                        <ProviderModal isOpen={isProviderModalOpen} onClose={() => setIsProviderModalOpen(false)} provider={selectedProvider || {}} onSave={fetchProviders} />
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Gestion des Réservations</h3>
+                        <input
+                            type="text"
+                            placeholder="Rechercher une réservation par service, client, prestataire ou statut..."
+                            className="shadow appearance-none border rounded py-2 px-3 w-full mb-4"
+                            value={reservationSearchTerm}
+                            onChange={(e) => setReservationSearchTerm(e.target.value)}
+                        />
+                        {filteredReservations.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-2 px-4 border-b">ID</th>
+                                            <th className="py-2 px-4 border-b">Client</th>
+                                            <th className="py-2 px-4 border-b">Client Téléphone</th> {/* Added */}
+                                            <th className="py-2 px-4 border-b">Prestataire</th>
+                                            <th className="py-2 px-4 border-b">Prestataire Téléphone</th> {/* Added */}
+                                            <th className="py-2 px-4 border-b">Service</th>
+                                            <th className="py-2 px-4 border-b">Date</th>
+                                            <th className="py-2 px-4 border-b">Statut</th>
+                                            <th className="py-2 px-4 border-b">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredReservations.map(res => (
+                                            <tr key={res.id} className="hover:bg-gray-50">
+                                                <td className="py-2 px-4 border-b">{res.id}</td>
+                                                <td className="py-2 px-4 border-b">{res.client_name}</td>
+                                                <td className="py-2 px-4 border-b">{res.client_phone_number || 'N/A'}</td> {/* Display phone number */}
+                                                <td className="py-2 px-4 border-b">{res.provider_name}</td>
+                                                <td className="py-2 px-4 border-b">{res.provider_phone_number || 'N/A'}</td> {/* Display phone number */}
+                                                <td className="py-2 px-4 border-b">{res.service}</td>
+                                                <td className="py-2 px-4 border-b">{res.date}</td>
+                                                <td className="py-2 px-4 border-b">
+                                                    <select
+                                                        value={res.status}
+                                                        onChange={(e) => handleUpdateReservationStatus(res.id, e.target.value)}
+                                                        className="border rounded p-1 text-sm"
+                                                    >
+                                                        <option value="pending">En attente</option>
+                                                        <option value="approved">Approuvée</option>
+                                                        <option value="rejected">Rejetée</option>
+                                                        <option value="completed">Terminée</option>
+                                                        <option value="cancelled">Annulée</option>
+                                                    </select>
+                                                </td>
+                                                <td className="py-2 px-4 border-b">
+                                                    <button
+                                                        onClick={() => handleDeleteReservation(res.id)}
+                                                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm"
+                                                    >
+                                                        Supprimer
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600">Aucune réservation trouvée. Assurez-vous que des réservations sont faites et que vous avez les permissions nécessaires.</p>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Client Dashboard
+        const ClientDashboard = ({ currentUserId, providers, reservations, fetchReservations }) => {
+            const [service, setService] = useState('');
+            const [date, setDate] = useState('');
+            const [selectedProvider, setSelectedProvider] = useState(null); // Changed from providerId to selectedProvider object
+            const [localMessage, setLocalMessage] = useState('');
+            const [reservationSearchTerm, setReservationSearchTerm] = useState('');
+            const [providerSearchTerm, setProviderSearchTerm] = useState(''); 
+
+            useEffect(() => {
+                console.log('CLIENT_DEBUG (ClientDashboard): currentUserId:', currentUserId);
+                console.log('CLIENT_DEBUG (ClientDashboard): Reservations received as prop (should be client-filtered):', reservations);
+                
+                if (!reservations || reservations.length === 0) {
+                    setLocalMessage("Aucune réservation trouvée pour vous. Vous n'avez peut-être pas encore fait de réservation.");
+                } else {
+                    setLocalMessage('');
+                }
+            }, [currentUserId, reservations]);
+
+            const clientReservations = reservations;
+
+
+            const filteredReservations = clientReservations.filter(reservation =>
+                (reservation.service && reservation.service.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.provider_name && reservation.provider_name.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.status && reservation.status.toLowerCase().includes(reservationSearchTerm.toLowerCase()))
+            );
+
+            const filteredProviders = providers.filter(provider =>
+                (provider.name && provider.name.toLowerCase().includes(providerSearchTerm.toLowerCase())) ||
+                (provider.service && provider.service.toLowerCase().includes(providerSearchTerm.toLowerCase())) ||
+                (provider.phone_number && provider.phone_number.toLowerCase().includes(providerSearchTerm.toLowerCase())) // Filter by phone number
+            );
+
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLocalMessage('');
+                if (!selectedProvider) {
+                    setLocalMessage("Veuillez sélectionner un prestataire.");
+                    return;
+                }
+                if (!currentUserId) {
+                    setLocalMessage("Impossible de créer une réservation sans ID client. Veuillez vous reconnecter.");
+                    return;
+                }
+                console.log("CLIENT_DEBUG (ClientDashboard): Submitting new reservation.");
+                console.log("CLIENT_DEBUG (ClientDashboard): CSRF_TOKEN before reservation POST:", CSRF_TOKEN);
+                console.log("CLIENT_DEBUG (ClientDashboard): document.cookie before reservation POST:", document.cookie);
+                console.log("CLIENT_DEBUG (ClientDashboard): Payload for new reservation:", {
+                    client: currentUserId, // This is the Client profile ID, not Django User ID
+                    provider: selectedProvider.id, // Use selectedProvider's ID
+                    service: service,
+                    date: date,
+                    status: 'pending'
+                });
+
+                try {
+                    const response = await secureFetch(`${API_BASE_URL}/reservations/`, 'POST', {
+                        client: currentUserId, // This is the Client profile ID, not Django User ID
+                        provider: selectedProvider.id, // Use selectedProvider's ID
+                        service: service,
+                        date: date,
+                        status: 'pending'
+                    });
+
+                    setLocalMessage(response.message || 'Réservation créée avec succès !');
+                    setService('');
+                    setDate('');
+                    setSelectedProvider(null); // Clear selected provider
+                    fetchReservations(); // Re-fetch reservations after successful creation
+                    console.log("CLIENT_DEBUG (ClientDashboard): Reservation created successfully. Fetching new reservations.");
+                } catch (error) {
+                    console.error("CLIENT_DEBUG (ClientDashboard): Reservation error (network):", error);
+                    setLocalMessage(error.message || 'Erreur de connexion au serveur. Veuillez réessayer.');
+                }
+            };
+
+            const handleCancelReservation = async (reservationId) => {
+                if (!window.confirm("Voulez-vous vraiment annuler cette réservation ?")) return;
+                setLocalMessage('');
+                console.log(`CLIENT_DEBUG (ClientDashboard): Cancelling reservation ${reservationId}.`);
+                console.log(`CLIENT_DEBUG (ClientDashboard): CSRF_TOKEN before cancel reservation PATCH:`, CSRF_TOKEN);
+                try {
+                    await secureFetch(`${API_BASE_URL}/reservations/${reservationId}/`, 'PATCH', { status: 'cancelled' });
+                    setLocalMessage('Réservation annulée avec succès !');
+                    fetchReservations(); // Re-fetch reservations after successful cancellation
+                    console.log(`CLIENT_DEBUG (ClientDashboard): Reservation ${reservationId} cancelled. Fetching new reservations.`);
+                } catch (error) {
+                    console.error("CLIENT_DEBUG (ClientDashboard): Reservation cancellation error (network):", error);
+                    setLocalMessage(error.message || 'Erreur réseau/connexion. Veuillez réessayer.');
+                }
+            };
+
+            return (
+                <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Tableau de Bord Client</h2>
+                    {localMessage && <MessageDisplay message={localMessage} type={localMessage.includes("succès") ? "success" : "error"} />}
+
+                    <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Faire une Nouvelle Réservation</h3>
+                        <div className="mb-4">
+                            <input
+                                type="text"
+                                placeholder="Rechercher un prestataire par nom, service ou numéro de téléphone..."
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                value={providerSearchTerm}
+                                onChange={(e) => setProviderSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        {filteredProviders.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                {filteredProviders.map(provider => (
+                                    <div key={provider.id} className="bg-gray-50 p-4 rounded-md border">
+                                        <h4 className="font-semibold">{provider.name}</h4>
+                                        <p className="text-sm text-gray-600">Service: {provider.service}</p>
+                                        {provider.description && <p className="text-gray-700 text-sm mt-2">{provider.description}</p>} {/* Display description */}
+                                        {provider.phone_number && (
+                                            <div className="flex items-center space-x-2 mt-2">
+                                                <p className="text-gray-700 text-sm">Tel: {provider.phone_number}</p>
+                                                <a 
+                                                    href={`https://wa.me/${formatPhoneNumber(provider.phone_number)}`} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="text-green-500 hover:text-green-700 text-lg"
+                                                    title={`Contacter ${provider.name} sur WhatsApp`}
+                                                >
+                                                    <i className="fab fa-whatsapp"></i>
+                                                </a>
+                                                <a 
+                                                    href={`tel:${provider.phone_number}`} 
+                                                    className="text-blue-500 hover:text-blue-700 text-lg"
+                                                    title={`Appeler ${provider.name}`}
+                                                >
+                                                    <i className="fas fa-phone"></i>
+                                                </a>
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => setSelectedProvider(provider)} // Store the whole provider object
+                                            className={`mt-2 py-1 px-3 rounded text-sm ${selectedProvider && selectedProvider.id === provider.id ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'}`}
+                                        >
+                                            {selectedProvider && selectedProvider.id === provider.id ? 'Sélectionné' : 'Sélectionner'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600 mb-6">Aucun prestataire trouvé.</p>
+                        )}
+
+                        {selectedProvider && (
+                            <form onSubmit={handleSubmit}>
+                                <h4 className="text-xl font-semibold mb-3">Réserver avec {selectedProvider.name}</h4>
+                                <div className="mb-4">
+                                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="service">
+                                        Service demandée:
+                                    </label>
+                                    <input
+                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                        id="service"
+                                        type="text"
+                                        placeholder="Ex: Réparation de Plomberie"
+                                        value={service}
+                                        onChange={(e) => setService(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="date">
+                                        Date de la Réservation:
+                                    </label>
+                                    <input
+                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                        id="date"
+                                        type="date"
+                                        value={date}
+                                        onChange={(e) => setDate(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <button
+                                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                        type="submit"
+                                    >
+                                        Soumettre Réservation
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Mes Réservations</h3>
+                        <div className="mb-4">
+                            <input
+                                type="text"
+                                placeholder="Rechercher une réservation par service ou prestataire..."
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                value={reservationSearchTerm}
+                                onChange={(e) => setReservationSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        {filteredReservations.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-2 px-4 border-b">Service</th>
+                                            <th className="py-2 px-4 border-b">Prestataire</th>
+                                            <th className="py-2 px-4 border-b">Date</th>
+                                            <th className="py-2 px-4 border-b">Statut</th>
+                                            <th className="py-2 px-4 border-b">Contact Prestataire</th> {/* Added */}
+                                            <th className="py-2 px-4 border-b">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredReservations.map(res => (
+                                            <tr key={res.id} className="hover:bg-gray-50">
+                                                <td className="py-2 px-4 border-b">{res.service}</td>
+                                                <td className="py-2 px-4 border-b">{res.provider_name}</td>
+                                                <td className="py-2 px-4 border-b">{res.date}</td>
+                                                <td className="py-2 px-4 border-b">
+                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                        res.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                        res.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                                        res.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                                        res.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                        {res.status}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2 px-4 border-b">
+                                                    {res.provider_phone_number ? (
+                                                        <div className="flex items-center space-x-2">
+                                                            <a 
+                                                                href={`https://wa.me/${formatPhoneNumber(res.provider_phone_number)}`} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer" 
+                                                                className="text-green-500 hover:text-green-700 text-lg"
+                                                                title="Contacter sur WhatsApp"
+                                                            >
+                                                                <i className="fab fa-whatsapp"></i>
+                                                            </a>
+                                                            <a 
+                                                                href={`tel:${res.provider_phone_number}`} 
+                                                                className="text-blue-500 hover:text-blue-700 text-lg"
+                                                                title="Appeler"
+                                                            >
+                                                                <i className="fas fa-phone"></i>
+                                                            </a>
+                                                        </div>
+                                                    ) : 'N/A'}
+                                                </td>
+                                                <td className="py-2 px-4 border-b">
+                                                    {res.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleCancelReservation(res.id)}
+                                                            className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm"
+                                                        >
+                                                            Annuler
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600">Aucune réservation trouvée.</p>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // NEW: Provider Dashboard Component
+        const ProviderDashboard = ({ currentUserId, reservations, fetchReservations }) => {
+            const [localMessage, setLocalMessage] = useState('');
+            const [reservationSearchTerm, setReservationSearchTerm] = useState('');
+
+            useEffect(() => {
+                console.log('CLIENT_DEBUG (ProviderDashboard): currentUserId:', currentUserId);
+                console.log('CLIENT_DEBUG (ProviderDashboard): Reservations received as prop (should be provider-filtered):', reservations);
+                if (!reservations || reservations.length === 0) {
+                    setLocalMessage("Aucune réservation trouvée pour vous.");
+                } else {
+                    setLocalMessage('');
+                }
+            }, [currentUserId, reservations]);
+
+            const providerReservations = reservations; // These should already be filtered by the backend
+
+            const filteredReservations = providerReservations.filter(reservation =>
+                (reservation.service && reservation.service.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.client_name && reservation.client_name.toLowerCase().includes(reservationSearchTerm.toLowerCase())) ||
+                (reservation.status && reservation.status.toLowerCase().includes(reservationSearchTerm.toLowerCase()))
+            );
+
+            const handleUpdateReservationStatus = async (reservationId, newStatus) => {
+                if (!window.confirm(`Voulez-vous vraiment changer le statut de cette réservation à "${newStatus}" ?`)) return;
+                setLocalMessage('');
+                console.log(`CLIENT_DEBUG (ProviderDashboard): Updating reservation ${reservationId} status to ${newStatus}.`);
+                console.log(`CLIENT_DEBUG (ProviderDashboard): CSRF_TOKEN before update reservation PATCH:`, CSRF_TOKEN);
+                try {
+                    await secureFetch(`${API_BASE_URL}/reservations/${reservationId}/`, 'PATCH', { status: newStatus });
+                    setLocalMessage('Statut de la réservation mis à jour !');
+                    fetchReservations(); // Re-fetch reservations after successful update
+                    console.log(`CLIENT_DEBUG (ProviderDashboard): Reservation ${reservationId} status updated. Fetching new reservations.`);
+                } catch (error) {
+                    console.error("CLIENT_DEBUG (ProviderDashboard): Reservation status update error (network):", error);
+                    setLocalMessage(error.message || 'Erreur réseau/connexion. Veuillez réessayer.');
+                }
+            };
+
+            return (
+                <div className="container mx-auto p-6 mt-10 animate-fade-in">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Tableau de Bord Prestataire</h2>
+                    {localMessage && <MessageDisplay message={localMessage} type={localMessage.includes("succès") ? "success" : "error"} />}
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Mes Réservations</h3>
+                        <div className="mb-4">
+                            <input
+                                type="text"
+                                placeholder="Rechercher une réservation par service ou client..."
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                value={reservationSearchTerm}
+                                onChange={(e) => setReservationSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        {filteredReservations.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-2 px-4 border-b">ID Réservation</th>
+                                            <th className="py-2 px-4 border-b">Client</th>
+                                            <th className="py-2 px-4 border-b">Client Téléphone</th>
+                                            <th className="py-2 px-4 border-b">Service Demandé</th>
+                                            <th className="py-2 px-4 border-b">Date</th>
+                                            <th className="py-2 px-4 border-b">Statut</th>
+                                            <th className="py-2 px-4 border-b">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredReservations.map(res => (
+                                            <tr key={res.id} className="hover:bg-gray-50">
+                                                <td className="py-2 px-4 border-b">{res.id}</td>
+                                                <td className="py-2 px-4 border-b">{res.client_name}</td>
+                                                <td className="py-2 px-4 border-b">
+                                                    {res.client_phone_number ? (
+                                                        <div className="flex items-center space-x-2">
+                                                            <a 
+                                                                href={`https://wa.me/${formatPhoneNumber(res.client_phone_number)}`} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer" 
+                                                                className="text-green-500 hover:text-green-700 text-lg"
+                                                                title="Contacter sur WhatsApp"
+                                                            >
+                                                                <i className="fab fa-whatsapp"></i>
+                                                            </a>
+                                                            <a 
+                                                                href={`tel:${res.client_phone_number}`} 
+                                                                className="text-blue-500 hover:text-blue-700 text-lg"
+                                                                title="Appeler"
+                                                            >
+                                                                <i className="fas fa-phone"></i>
+                                                            </a>
+                                                        </div>
+                                                    ) : 'N/A'}
+                                                </td>
+                                                <td className="py-2 px-4 border-b">{res.service}</td>
+                                                <td className="py-2 px-4 border-b">{res.date}</td>
+                                                <td className="py-2 px-4 border-b">
+                                                    <select
+                                                        value={res.status}
+                                                        onChange={(e) => handleUpdateReservationStatus(res.id, e.target.value)}
+                                                        className="border rounded p-1 text-sm"
+                                                    >
+                                                        <option value="pending">En attente</option>
+                                                        <option value="approved">Approuvée</option>
+                                                        <option value="rejected">Rejetée</option>
+                                                        <option value="completed">Terminée</option>
+                                                        <option value="cancelled">Annulée</option>
+                                                    </select>
+                                                </td>
+                                      <td className="py-2 px-4 border-b">
+    <div className="flex items-center space-x-2"> {/* Added flex container with spacing */}
+        {/* Actions for provider, e.g., mark as completed */}
+        {res.status === 'approved' && (
+            <button
+                onClick={() => handleUpdateReservationStatus(res.id, 'completed')}
+                className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-3 rounded text-sm"
+            >
+                Marquer comme Terminé
+            </button>
+        )}
+        {res.status === 'pending' && (
+            <button
+                onClick={() => handleUpdateReservationStatus(res.id, 'approved')}
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm"
+            >
+                Approuver
+            </button>
+        )}
+        {res.status === 'pending' && (
+            <button
+                onClick={() => handleUpdateReservationStatus(res.id, 'rejected')}
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm"
+            >
+                Rejeter
+            </button>
+        )}
+    </div>
+</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600">Aucune réservation trouvée pour votre service.</p>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+
+        function App() {
+          const [currentPage, setCurrentPage] = useState('home');
+          const [isLoggedIn, setIsLoggedIn] = useState(false);
+          const [userType, setUserType] = useState('guest');
+          const [username, setUsername] = useState('');
+          const [currentUserId, setCurrentUserId] = useState(''); // This will store the profile ID (Client.id or Provider.id) or User.id for admin
+          const [currentUserPhoneNumber, setCurrentUserPhoneNumber] = useState(''); // New state for logged-in user's phone number
+
+          const [clients, setClients] = useState([]);
+          const [providers, setProviders] = useState([]);
+          const [reservations, setReservations] = useState([]);
+          const [globalMessage, setGlobalMessage] = useState('');
+
+          const [resetUidb64, setResetUidb64] = useState(null);
+          const [resetToken, setResetToken] = useState(null);
+
+          const navigateTo = useCallback((page, params = {}) => {
+            setCurrentPage(page);
+            setGlobalMessage(''); // Clear global messages on navigation
+            if (page === 'resetPasswordConfirm') {
+                setResetUidb64(params.uidb64);
+                setResetToken(params.token);
+            }
+            const url = new URL(window.location.href);
+            // Clean up URL parameters related to password reset/page navigation
+            if (url.searchParams.has('uidb64') || url.searchParams.has('token') || url.searchParams.has('page')) {
+                url.searchParams.delete('uidb64');
+                url.searchParams.delete('token');
+                url.searchParams.delete('page');
+                window.history.replaceState({}, document.title, url.toString());
+            }
+          }, []);
+
+          // Effect to handle initial URL parameters for password reset confirmation
+          useEffect(() => {
+              const urlParams = new URLSearchParams(window.location.search);
+              const pageFromUrl = urlParams.get('page');
+              const uid = urlParams.get('uidb64');
+              const token = urlParams.get('token');
+
+              if (pageFromUrl === 'resetPasswordConfirm' && uid && token) {
+                  navigateTo('resetPasswordConfirm', { uidb64: uid, token: token });
+              }
+          }, [navigateTo]);
+
+
+          const handleLoginSuccess = (role, usernameFromBackend, userIdFromBackend, phoneNumberFromBackend) => {
+            console.log("CLIENT_DEBUG (App): Login Success! Role:", role, "Username:", usernameFromBackend, "User ID (profile/user):", userIdFromBackend, "Phone:", phoneNumberFromBackend);
+            setIsLoggedIn(true);
+            setUserType(role);
+            setUsername(usernameFromBackend);
+            setCurrentUserId(userIdFromBackend); // Store the profile ID or admin User ID
+            setCurrentUserPhoneNumber(phoneNumberFromBackend); // Store phone number
+            setGlobalMessage('Connexion réussie !');
+            // Crucial: Re-read CSRF token immediately after successful login
+            // Django sends a new CSRF token with the login response via cookie.
+            updateCsrfToken();
+            console.log("CLIENT_DEBUG (App): document.cookie IMMEDIATELY AFTER handleLoginSuccess:", document.cookie); // Added log
+
+            if (role === 'client') {
+                navigateTo('clientDashboard');
+            } else if (role === 'provider') {
+                navigateTo('providerDashboard');
+            } else if (role === 'admin') {
+                navigateTo('adminDashboard');
+            }
+          };
+
+          const handleLogout = async () => {
+            try {
+              console.log("CLIENT_DEBUG (App): Logging out.");
+              console.log("CLIENT_DEBUG (App): CSRF_TOKEN before logout POST:", CSRF_TOKEN);
+              console.log("CLIENT_DEBUG (App): document.cookie before logout POST:", document.cookie);
+              const response = await secureFetch(`${API_BASE_URL}/logout/`, 'POST');
+
+              setGlobalMessage('Déconnexion réussie !');
+              console.log("CLIENT_DEBUG (App): Logout successful.");
+            } catch (error) {
+              console.error("CLIENT_DEBUG (App): Logout error (network):", error);
+              setGlobalMessage(error.message || 'Erreur de connexion au serveur lors de la déconnexion. Vérifiez le backend et votre connexion.');
+            } finally {
+              setIsLoggedIn(false);
+              setUserType('guest');
+              setUsername('');
+              setCurrentUserId(''); // Clear user ID on logout
+              setCurrentUserPhoneNumber(''); // Clear phone number on logout
+              updateCsrfToken(); // Clear or update CSRF token after logout
+              console.log("CLIENT_DEBUG (App): document.cookie AFTER logout and updateCsrfToken:", document.cookie); // Added log
+              navigateTo('home');
+            }
+          };
+
+          const fetchClients = useCallback(async (search = '', signal = null) => {
+            console.log("CLIENT_DEBUG (App): Fetching clients...");
+            // Only fetch clients if user is logged in and is an admin
+            if (!isLoggedIn || userType !== 'admin') {
+                console.log("CLIENT_DEBUG (App): Not logged in as admin. Skipping client fetch.");
+                setClients([]); // Ensure client list is empty if not authorized
+                return;
+            }
+            console.log("CLIENT_DEBUG (App - fetchClients): CSRF_TOKEN before fetch:", CSRF_TOKEN);
+            try {
+              const data = await secureFetch(`${API_BASE_URL}/clients/?search=${search}`, 'GET', null, signal);
+              console.log("CLIENT_DEBUG (App): Clients fetched successfully. Count:", data.length, "Data:", data);
+              setClients(data);
+            } catch (error) {
+              if (error.name === 'AbortError') {
+                  console.log('Fetch for clients aborted.');
+              } else {
+                  console.error("CLIENT_DEBUG (App): Error fetching clients (network/parsing):", error);
+                  setGlobalMessage(error.message || 'Erreur: Impossible de charger les clients. Vérifiez votre connexion au serveur.');
+                  setClients([]);
+              }
+            }
+          }, [isLoggedIn, userType, CSRF_TOKEN]); // Dependencies for useCallback
+
+          const fetchProviders = useCallback(async (search = '', signal = null) => {
+            console.log("CLIENT_DEBUG (App): Fetching providers...");
+            // Providers list is public, so no explicit isLoggedIn check needed here, but include credentials for session if logged in
+            console.log("CLIENT_DEBUG (App - fetchProviders): CSRF_TOKEN before fetch:", CSRF_TOKEN);
+            try {
+              // Add X-CSRFToken even for public GET, for consistency in authenticated context
+              const data = await secureFetch(`${API_BASE_URL}/providers/?search=${search}`, 'GET', null, signal);
+              console.log("CLIENT_DEBUG (App): Providers fetched successfully. Count:", data.length, "Data:", data);
+              setProviders(data);
+            } catch (error) {
+              if (error.name === 'AbortError') {
+                  console.log('Fetch for providers aborted.');
+              } else {
+                  console.error("CLIENT_DEBUG (App): Error fetching providers (network/parsing):", error);
+                  setGlobalMessage(error.message || 'Erreur: Problème au chargement des prestataires.');
+                  setProviders([]);
+              }
+            }
+          }, [CSRF_TOKEN]); // Dependency on CSRF_TOKEN
+
+          const fetchReservations = useCallback(async (search = '', signal = null) => {
+            console.log("CLIENT_DEBUG (App): Fetching reservations...");
+            // Only fetch reservations if user is logged in
+            if (!isLoggedIn) {
+                console.log("CLIENT_DEBUG (App): Not logged in. Skipping reservation fetch.");
+                setReservations([]); // Ensure reservation list is empty if not authenticated
+                return;
+            }
+            console.log("CLIENT_DEBUG (App - fetchReservations): CSRF_TOKEN before fetch:", CSRF_TOKEN);
+            try {
+              // The backend (views.py) is responsible for filtering reservations by user type.
+              // So, the 'data' returned here should already be specific to the logged-in user.
+              const data = await secureFetch(`${API_BASE_URL}/reservations/?search=${search}`, 'GET', null, signal);
+              console.log("CLIENT_DEBUG (App): Reservations fetched successfully. Count:", data.length, "Data:", data);
+              setReservations(data);
+            } catch (error) {
+              if (error.name === 'AbortError') {
+                  console.log('Fetch for reservations aborted.');
+              } else {
+                  console.error("CLIENT_DEBUG (App): Error fetching reservations (network/parsing):", error);
+                  setGlobalMessage(error.message || 'Erreur: Impossible de charger les réservations. Vérifiez votre connexion au serveur.');
+                  setReservations([]);
+              }
+            }
+          }, [isLoggedIn, CSRF_TOKEN]); // Dependencies for useCallback
+
+          // Main useEffect to trigger data fetching based on login state and user type
+          useEffect(() => {
+            // Create an AbortController to cancel pending requests if the component unmounts
+            const abortController = new AbortController();
+            const signal = abortController.signal;
+
+            console.log("CLIENT_DEBUG (App) useEffect: isLoggedIn changed to", isLoggedIn, "userType to", userType, "currentUserId:", currentUserId);
+            // Always try to get a fresh CSRF token when relevant state changes (e.g., after login)
+            updateCsrfToken();
+            console.log("CLIENT_DEBUG (App) useEffect: CSRF_TOKEN after update:", CSRF_TOKEN);
+
+            // Always fetch providers (public list)
+            fetchProviders(null, signal);
+
+            if (isLoggedIn) {
+              if (userType === 'admin') {
+                fetchClients(null, signal); // Only admin fetches clients
+              } else {
+                setClients([]); // Clear clients if not an admin
+              }
+              // Authenticated users fetch their specific reservations (backend filters)
+              fetchReservations(null, signal); 
+            } else {
+              // If logged out, clear sensitive data
+              setClients([]);
+              setReservations([]);
+            }
+
+            // Cleanup function to abort pending requests if the component unmounts
+            return () => {
+                abortController.abort();
+            };
+          }, [isLoggedIn, userType, fetchClients, fetchProviders, fetchReservations, currentUserId, CSRF_TOKEN]);
+
+
+          const renderPage = () => {
+            switch (currentPage) {
+              case 'home':
+                return <HomePage />;
+              case 'register':
+                return <RegisterForm navigateTo={navigateTo} />;
+              case 'clientLogin':
+                return <LoginForm role="client" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+              case 'providerLogin':
+                return <LoginForm role="provider" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+              case 'adminLogin':
+                return <LoginForm role="admin" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+              case 'forgotPassword':
+                  return <ForgotPasswordForm navigateTo={navigateTo} />;
+              case 'resetPasswordConfirm':
+                  if (resetUidb64 && resetToken) {
+                      return <PasswordResetConfirmForm navigateTo={navigateTo} uidb64={resetUidb64} token={resetToken} />;
+                  }
+                  navigateTo('forgotPassword'); // Redirect if no valid token/uid
+                  return null;
+              case 'listProviders':
+                return <ListProviders providers={providers} />;
+              case 'clientDashboard':
+                if (isLoggedIn && userType === 'client') {
+                  return <ClientDashboard
+                             currentUserId={currentUserId}
+                             providers={providers}
+                             reservations={reservations} // This `reservations` should already be filtered by backend
+                             fetchReservations={fetchReservations}
+                         />;
+                } else {
+                  setGlobalMessage('Accès refusé. Veuillez vous connecter en tant que client.');
+                  return <LoginForm role="client" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+                }
+              case 'providerDashboard':
+                if (isLoggedIn && userType === 'provider') {
+                  return <ProviderDashboard
+                             currentUserId={currentUserId}
+                             reservations={reservations} // This `reservations` should already be filtered by backend
+                             fetchReservations={fetchReservations}
+                         />;
+                } else {
+                  setGlobalMessage('Accès refusé. Veuillez vous connecter en tant que prestataire.');
+                  return <LoginForm role="provider" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+                }
+              case 'adminDashboard':
+                if (isLoggedIn && userType === 'admin') {
+                  return <AdminDashboard
+                             clients={clients}
+                             providers={providers}
+                             reservations={reservations} // This `reservations` should already be all reservations for admin
+                             fetchClients={fetchClients}
+                             fetchProviders={fetchProviders}
+                             fetchReservations={fetchReservations}
+                         />;
+                } else {
+                  setGlobalMessage('Accès refusé. Veuillez vous connecter en tant qu\'administrateur.');
+                  return <LoginForm role="admin" onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} />;
+                }
+              case 'aboutUs':
+                  return <AboutUsPage />; {/* New "À Propos" page */}
+              case 'contact':
+                  return <ContactPage />; {/* New "Contact" page */}
+              default:
+                return <HomePage />;
+            }
+          };
+          return (
+            <div className="font-inter flex flex-col min-h-screen">
+              <Navbar isLoggedIn={isLoggedIn} userType={userType} username={username} navigateTo={navigateTo} handleLogout={handleLogout} />
+              <main className="flex-grow pt-16">
+                {globalMessage && (
+                    <MessageDisplay message={globalMessage} type={globalMessage.includes("succès") ? "success" : "error"} />
+                )}
+                {renderPage()}
+              </main>
+              <Footer />
+            </div>
+          );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>

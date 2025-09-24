@@ -1,0 +1,37 @@
+# render.yaml
+services:
+  - type: web
+    name: plateforme-services
+    env: python
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    startCommand: "gunicorn plateforme_services.wsgi:application"
+    healthCheckPath: /admin/login/ # Ou une autre URL légère
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: plateforme-services-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true # Render générera une clé secrète sécurisée
+      - key: WEB_CONCURRENCY
+        value: 4 # Nombre de workers Gunicorn, ajustez si nécessaire
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      # Ajoutez d'autres variables d'environnement si nécessaire
+    autoDeploy: true
+    # Ajoutez un disque persistant si vous avez des fichiers uploadés par les utilisateurs
+    # disk:
+    #   name: mydata
+    #   mountPath: /var/data
+    #   sizeGB: 1
+
+  - type: pserv
+    name: plateforme-services-db
+    plan: free # Plan gratuit
+    databaseName: plateforme_services_db # Nom de la base de données
+    ipAllowList: [] # Autorise toutes les IPs pour l'accès (par défaut pour Render)
+    # version: "14" # Version de PostgreSQL, par défaut la dernière stable

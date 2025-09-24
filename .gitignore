@@ -1,0 +1,22 @@
+# Base de données locale
+db.sqlite3
+db.sqlite3-journal
+
+# Fichiers Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+env/
+venv/
+
+# Fichiers statiques collectés
+staticfiles/
+
+# Logs et temporaires
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
