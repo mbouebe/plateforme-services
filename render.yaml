@@ -2,7 +2,7 @@ services:
   - type: web
     name: plateforme-services
     env: python
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py makemigrations --dry-run && python manage.py migrate"
     startCommand: "gunicorn plateforme_services.wsgi:application"
     healthCheckPath: /admin/login/
     envVars:
@@ -15,11 +15,13 @@ services:
       - key: WEB_CONCURRENCY
         value: 4
       - key: DJANGO_DEBUG
-        value: "False"
+        value: "True"  # Temporaire pour voir les erreurs détaillées
       - key: SESSION_COOKIE_SECURE
         value: "True"
       - key: CSRF_COOKIE_SECURE
         value: "True"
+      - key: PYTHONPATH
+        value: "."
     autoDeploy: true
 
   - type: pserv
