@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import TemplateView
 from .views import (
     LoginView, LogoutView,
     ClientListCreate, ClientRetrieveUpdateDestroy,
@@ -7,6 +8,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('', TemplateView.as_view(template_name='service/appli.html'), name='home'),
     path('login/', LoginView.as_view(), name='api_login'),
     path('logout/', LogoutView.as_view(), name='api_logout'),
     path('clients/', ClientListCreate.as_view(), name='client_list_create'),
