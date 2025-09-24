@@ -130,9 +130,11 @@ SESSION_COOKIE_DOMAIN = None
 # CSRF (Clé pour votre JS React)
 CSRF_COOKIE_NAME = 'csrftoken'
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SECURE = os.environ.get('CSRF_COOKIE_SECURE', 'False') == 'True'  # True sur Render
-CSRF_COOKIE_HTTPONLY = False  # Essentiel : False pour accès JS (getCSRFTokenFromCookie)
-CSRF_USE_SESSIONS = False
+CSRF_COOKIE_SECURE = os.environ.get('CSRF_COOKIE_SECURE', 'False') == 'True'  # False en local HTTP
+CSRF_COOKIE_HTTPONLY = False  # Obligatoire pour JS
+SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False') == 'True'  # Même chose
+CSRF_USE_SESSIONS = False  # Utilise les cookies
+     
 CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
 
 # REST Framework
